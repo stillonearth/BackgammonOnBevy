@@ -5,5 +5,8 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-bevy = "0.10"
+bevy = { version = "0.10", features = ["jpeg"] }
 rand = "0.8.5"
+bevy_gltf = "0.10"
+bevy_flycam = { git = "https://github.com/NiklasEi/bevy_flycam.git", rev = "7d69689" }
+bevy-inspector-egui = { version = "0.18.1" }
