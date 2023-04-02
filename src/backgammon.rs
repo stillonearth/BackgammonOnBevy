@@ -26,18 +26,18 @@ pub struct Board {
 
 impl Board {
     fn is_player_home_complete(&self, color: Color) -> bool {
-        let home_board = if color == Color::White { 18..24 } else { 0..6 };
-        let home_of_same_color = home_board.clone().all(|i| {
+        let mut home_board = if color == Color::White { 18..24 } else { 0..6 };
+        let home_of_same_color = home_board.all(|i| {
             let clr = self.get_point_color(i as usize);
-            return clr.is_none() || clr.unwrap() == color;
+            clr.is_none() || clr.unwrap() == color
         });
 
-        let rest_of_board = if color == Color::White { 0..18 } else { 6..24 };
-        let rest_of_board_is_empty = rest_of_board.clone().all(|i| {
+        let mut rest_of_board = if color == Color::White { 0..18 } else { 6..24 };
+        let rest_of_board_is_empty = rest_of_board.all(|i| {
             let clr = self.get_point_color(i as usize);
-            return clr.is_none() || clr.unwrap() != color;
+            clr.is_none() || clr.unwrap() != color
         });
-        return home_of_same_color && rest_of_board_is_empty;
+        home_of_same_color && rest_of_board_is_empty
     }
 
     fn print(&self) {
@@ -113,7 +113,7 @@ impl Board {
             self.points[to_point] += direction;
         }
 
-        return Ok(());
+        Ok(())
     }
 
     pub fn can_move_piece(&self, player: Color, from_point: usize, to_point: usize) -> bool {
@@ -138,7 +138,7 @@ impl Board {
 
         // Проверяем, что точка назначения находится в допустимой зоне для хода
         let direction = if player == Color::White { 1 } else { -1 };
-        if to_point < 0 || to_point >= 24 || to_point == 0 || to_point == 23 {
+        if to_point >= 24 || to_point == 0 || to_point == 23 {
             return false;
         }
         if to_point_color == Some(opposite_color) && to_point < from_point && direction == 1 {
@@ -153,17 +153,16 @@ impl Board {
 
     fn get_point_color(&self, point: usize) -> Option<Color> {
         let point_count = self.points[point];
-        if point_count == 0 {
-            None
-        } else if point_count > 0 {
-            Some(Color::White)
-        } else {
-            Some(Color::Black)
+
+        match point_count {
+            0 => None,
+            _ if point_count > 0 => Some(Color::White),
+            _ => Some(Color::Black),
         }
     }
 
     fn get_point_count(&self, point: usize) -> usize {
-        self.points[point].abs() as usize
+        self.points[point].unsigned_abs() as usize
     }
 
     pub fn opposite_bar_index(&self, color: Color) -> usize {
@@ -183,9 +182,10 @@ impl Board {
             idx -= 24;
         }
 
-        return idx;
+        idx
     }
 
+    #[allow(dead_code)]
     fn home(&self, player: Color) -> Range<usize> {
         if player == Color::White {
             18..24
@@ -220,10 +220,16 @@ pub struct Game {
     pub player: Color,
 }
 
+impl Default for Game {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Game {
     pub fn can_move(&self, player: Color) -> bool {
         let possible_moves = self.get_possible_moves(player, self.dice_rolls.clone());
-        return possible_moves.len() > 0;
+        !possible_moves.is_empty()
     }
 
     pub fn get_possible_moves(&self, player: Color, dice_rolls: Vec<usize>) -> Vec<(usize, usize)> {
@@ -276,7 +282,7 @@ impl Game {
                             valid_move = true;
                         }
                         Ok(index) => {
-                            println!("Invalid move destination: {}", index);
+                            println!("Invalid move destination: {index}");
                         }
                         Err(_) => {
                             println!("Invalid input, please enter a number");
@@ -284,7 +290,7 @@ impl Game {
                     }
                 }
                 Ok(index) => {
-                    println!("Invalid piece index: {}", index);
+                    println!("Invalid piece index: {index}");
                 }
                 Err(_) => {
                     println!("Invalid input, please enter a number");
@@ -348,11 +354,12 @@ impl Game {
             }
         }
 
-        return (highest_index, highest_value);
+        (highest_index, highest_value)
     }
 
     fn bear_off(&self) {}
 
+    #[allow(dead_code)]
     fn bear_off_piece(&mut self, from: i32, roll: i32) {
         let direction = if self.player == Color::White { 1 } else { -1 };
         let index = from - direction;
@@ -361,9 +368,7 @@ impl Game {
         if value == 0 {
             // special case
             let next_index = (index - direction) as usize;
-            let next_destination =
-                self.board
-                    .get_index(self.player, next_index as usize, roll as usize);
+            let next_destination = self.board.get_index(self.player, next_index, roll as usize);
             if self
                 .board
                 .can_move_piece(self.player, next_index, next_destination)
@@ -373,7 +378,7 @@ impl Game {
                     .unwrap();
             } else {
                 // remove a piece from the highest point on which one of this checkers resides
-                let (highest_index, highest_value) = self.highest_point_in_home_zone();
+                let (highest_index, _highest_value) = self.highest_point_in_home_zone();
                 self.board.points[highest_index] -= direction;
             }
         } else {
@@ -388,6 +393,7 @@ impl Game {
     }
 }
 
+#[allow(dead_code)]
 fn play_game() {
     // Create a new game instance
     let mut game = Game::new();

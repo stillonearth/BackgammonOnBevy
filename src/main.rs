@@ -2,9 +2,9 @@
 
 use bevy::{
     pbr::{CascadeShadowConfigBuilder, DirectionalLightShadowMap},
-    prelude::{shape::Plane, *},
+    prelude::*,
 };
-use bevy_flycam::{MovementSettings, PlayerPlugin};
+// use bevy_flycam::{MovementSettings, PlayerPlugin};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 mod backgammon;
@@ -28,7 +28,6 @@ fn main() {
         // })
         .add_startup_system(spawn_board)
         .add_startup_system(spawn_pieces)
-        // .add_startup_system(spawn_floor_plane)
         .run();
 }
 
@@ -75,8 +74,8 @@ pub fn spawn_pieces(
             color = Color::BLACK;
         }
 
-        let position = (position + 1) as usize;
-        let num_pieces = piece.abs() as usize;
+        let position = position + 1_usize;
+        let num_pieces = piece.unsigned_abs() as usize;
 
         for row in 1..=num_pieces {
             let [x, y] = get_piece_coordinate(position, row);
@@ -132,5 +131,5 @@ fn get_piece_coordinate(position: usize, row: usize) -> [f32; 2] {
         }
     }
 
-    return coordinates;
+    coordinates
 }
