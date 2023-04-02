@@ -1,12 +1,12 @@
 use rand::Rng;
 use std::{io, ops::Range};
 
-// Определяем тип игральной кости.
+// Define the type of dice.
 enum Dice {
     D6,
 }
 
-// Определяем тип игровой фишки.
+// Define the type of game piece.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Color {
     White,
@@ -22,10 +22,10 @@ impl Color {
     }
 }
 
-// Определяем тип игровой доски.
+// Define the type of game board.
 struct Board {
-    points: [i32; 24], // Количество фишек на каждой точке доски.
-    bar: [i32; 2],     // Количество фишек на баре.
+    points: [i32; 24], // Number of pieces on each point of the board.
+    bar: [i32; 2],     // Number of pieces on the bar.
 }
 
 impl Board {
@@ -45,40 +45,55 @@ impl Board {
     }
 
     fn print(&self) {
-        // Отображение верхней части доски
-        println!("| 12 11 10  9  8  7 | 6  5  4  3  2  1 |");
-        println!("|-------------------|------------------|");
+        let points = self.points;
 
-        // Отображение фишек на доске
-        for i in (0..6).rev() {
+        println!("| 13|14|15|16|17|18|   |19|20|21|22|23|24 |");
+        println!("|------------------|   |------------------|");
+        for row in 1..=5 {
             print!("|");
-            for j in 0..12 {
-                let point = self.points[j];
-                if point > 0 && point > i {
-                    print!(" O ");
-                } else if point < 0 && -point > i {
-                    print!(" X ");
+            for point in 13..=24 {
+                if points[point - 1] >= row {
+                    print!(" W ");
+                } else if points[point - 1] <= -row {
+                    print!(" B ");
                 } else {
                     print!("   ");
                 }
-            }
-            print!("|");
-            for j in (12..24).rev() {
-                let point = self.points[j];
-                if point < 0 && -point > i {
-                    print!(" X ");
-                } else if point > 0 && point > i {
-                    print!(" O ");
-                } else {
-                    print!("   ");
+
+                if point == 18 {
+                    print!("|   |");
+                }
+
+                if point == 24 {
+                    println!("|");
                 }
             }
-            println!("|");
         }
 
-        // Отображение нижней части доски
-        println!("|-------------------|------------------|");
-        println!("| 13 14 15 16 17 18 |19 20 21 22 23 24 |");
+        println!("|------------------|   |------------------|");
+
+        for row in (1..=5).rev() {
+            print!("|");
+            for point in (1..=12).rev() {
+                if points[point - 1] >= row {
+                    print!(" W ");
+                } else if points[point - 1] <= -row {
+                    print!(" B ");
+                } else {
+                    print!("   ");
+                }
+
+                if point == 7 {
+                    print!("|   |");
+                }
+
+                if point == 1 {
+                    println!("|");
+                }
+            }
+        }
+        println!("|------------------|   |------------------|");
+        println!("| 12|11|10| 9| 8| 7|   | 6| 5| 4| 4| 2| 1 |");
     }
 
     pub fn make_move(
@@ -153,13 +168,6 @@ impl Board {
 
     fn get_point_count(&self, point: usize) -> usize {
         self.points[point].abs() as usize
-    }
-
-    pub fn hit_index(&self, color: Color) -> usize {
-        match color {
-            Color::White => 0,
-            Color::Black => 25,
-        }
     }
 
     pub fn opposite_bar_index(&self, color: Color) -> usize {
@@ -362,10 +370,6 @@ impl Game {
 
     fn bear_off_piece(&mut self, from: i32, roll: i32) {
         let direction = if self.player == Color::White { 1 } else { -1 };
-        let to = from as i32 + direction * roll;
-
-        let white_in_home_zone = self.player == Color::White && (18..24).contains(&from);
-        let black_in_home_zone = self.player == Color::Black && (0..6).contains(&from);
         let index = from - direction;
         let value = self.board.points[index as usize];
 
@@ -380,7 +384,8 @@ impl Game {
                 .can_move_piece(self.player, next_index, next_destination)
             {
                 self.board
-                    .make_move(self.player, next_index, next_destination);
+                    .make_move(self.player, next_index, next_destination)
+                    .unwrap();
             } else {
                 // remove a piece from the highest point on which one of this checkers resides
                 let (highest_index, highest_value) = self.highest_point_in_home_zone();
@@ -438,5 +443,8 @@ fn play_game() {
 }
 
 fn main() {
-    play_game();
+    // play_game();
+
+    let mut game = Game::new();
+    game.board.print();
 }
