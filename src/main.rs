@@ -331,7 +331,7 @@ fn ui_logic(
         text.sections[0].value = format!("Turn: {:?}", game.player);
     }
 
-    if game.dice_rolled == true && game.dice_rolls.len() > 0 {
+    if game.dice_rolled && !game.dice_rolls.is_empty() {
         for mut text in &mut label_set.p1().iter_mut() {
             text.sections[0].value = format!("Move Stack: {:?}", game.dice_rolls);
         }
@@ -350,7 +350,7 @@ pub(crate) fn event_dice_roll_result(
     mut dice_rolls: EventReader<DiceRollResult>,
     mut game: ResMut<game::Game>,
 ) {
-    let player = game.player.clone();
+    let player = game.player;
     for event in dice_rolls.iter() {
         game.game_log.push(GameLogEntry {
             player,
