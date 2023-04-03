@@ -1,5 +1,7 @@
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
+use std::time::Duration;
+
 use bevy::{
     pbr::{CascadeShadowConfigBuilder, DirectionalLightShadowMap},
     prelude::*,
@@ -8,11 +10,12 @@ use bevy_dice::*;
 // use bevy_flycam::{MovementSettings, PlayerPlugin};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
+use game::GameLogEntry;
 
-mod backgammon;
+mod game;
 
 fn main() {
-    let game = backgammon::Game::new();
+    let game = game::Game::new();
 
     App::new()
         .insert_resource(AmbientLight {
@@ -29,6 +32,7 @@ fn main() {
         })
         .insert_resource(DirectionalLightShadowMap { size: 4096 })
         .insert_resource(game)
+        .insert_resource(GameUIState::None)
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugin(WorldInspectorPlugin::new())
@@ -40,7 +44,10 @@ fn main() {
         .add_startup_system(spawn_board)
         .add_startup_system(spawn_pieces)
         .add_startup_system(setup_ui)
-        .add_system(ui_interactive)
+        .add_system(ui_logic)
+        .add_system(event_dice_roll_result)
+        .add_system(event_dice_rolls_complete)
+        .add_system(hightlight_choosable_pieces)
         .run();
 }
 
@@ -73,11 +80,17 @@ fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
         .insert(Name::new("Board"));
 }
 
+#[derive(Component)]
+struct Piece {
+    row: usize,
+    position: usize,
+}
+
 pub fn spawn_pieces(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    game: Res<backgammon::Game>,
+    game: Res<game::Game>,
 ) {
     let cp_handle = asset_server.load("models/piece.glb#Mesh0/Primitive0");
     let mut transform = Transform::from_xyz(0.0, 0.0, 0.0)
@@ -103,7 +116,11 @@ pub fn spawn_pieces(
                 transform,
                 ..Default::default()
             };
-            commands.spawn(bundle).insert(Name::new("Piece"));
+
+            commands
+                .spawn(bundle)
+                .insert(Name::new("Piece"))
+                .insert(Piece { row, position });
         }
     }
 }
@@ -160,6 +177,9 @@ struct LabelPlayerTurn;
 #[derive(Component)]
 struct ButtonRollDice;
 
+#[derive(Component)]
+struct LabelMoveStack;
+
 fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
         .spawn(NodeBundle {
@@ -206,7 +226,31 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                 ))
                 .insert(LabelPlayerTurn);
         })
-        .insert(Name::new("Title"));
+        .insert(Name::new("TurnIndicator"));
+
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                size: Size::width(Val::Percent(100.0)),
+                align_items: AlignItems::End,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|parent| {
+            parent
+                .spawn(TextBundle::from_section(
+                    "",
+                    TextStyle {
+                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                        font_size: 40.0,
+                        color: Color::rgb(0.9, 0.9, 0.9),
+                    },
+                ))
+                .insert(LabelMoveStack);
+        })
+        .insert(Name::new("Move Stack"));
 
     commands
         .spawn(NodeBundle {
@@ -246,15 +290,19 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 #[allow(clippy::type_complexity)]
-fn ui_interactive(
+fn ui_logic(
+    mut commands: Commands,
     mut interaction_query: Query<
         (Entity, &Interaction, &mut BackgroundColor, &Children),
         (Changed<Interaction>, With<Button>),
     >,
-    mut player_turn_label_query: Query<&mut Text, With<LabelPlayerTurn>>,
+    mut label_set: ParamSet<(
+        Query<&mut Text, With<LabelPlayerTurn>>,
+        Query<&mut Text, With<LabelMoveStack>>,
+    )>,
     mut button_roll_dice_query: Query<&mut Visibility, With<ButtonRollDice>>,
     mut ev_dice_started: EventWriter<DiceRollStartEvent>,
-    mut game: ResMut<backgammon::Game>,
+    mut game: ResMut<game::Game>,
 ) {
     for (_entity, interaction, mut color, _) in &mut interaction_query {
         match *interaction {
@@ -265,6 +313,10 @@ fn ui_interactive(
 
                 ev_dice_started.send(DiceRollStartEvent { num_dice });
                 game.dice_rolled = true;
+
+                commands.spawn(()).insert(DiceRollTimer {
+                    timer: Timer::new(Duration::from_secs(2), TimerMode::Once),
+                });
             }
             Interaction::Hovered => {
                 *color = HOVERED_BUTTON.into();
@@ -275,8 +327,14 @@ fn ui_interactive(
         }
     }
 
-    for mut text in &mut player_turn_label_query.iter_mut() {
+    for mut text in &mut label_set.p0().iter_mut() {
         text.sections[0].value = format!("Turn: {:?}", game.player);
+    }
+
+    if game.dice_rolled == true && game.dice_rolls.len() > 0 {
+        for mut text in &mut label_set.p1().iter_mut() {
+            text.sections[0].value = format!("Move Stack: {:?}", game.dice_rolls);
+        }
     }
 
     for mut visibility in &mut button_roll_dice_query.iter_mut() {
@@ -284,6 +342,82 @@ fn ui_interactive(
             *visibility = Visibility::Hidden;
         } else {
             *visibility = Visibility::Inherited;
+        }
+    }
+}
+
+pub(crate) fn event_dice_roll_result(
+    mut dice_rolls: EventReader<DiceRollResult>,
+    mut game: ResMut<game::Game>,
+) {
+    let player = game.player.clone();
+    for event in dice_rolls.iter() {
+        game.game_log.push(GameLogEntry {
+            player,
+            dice_rolls: event.values[0].clone(),
+        });
+    }
+}
+
+#[derive(Component)]
+pub(crate) struct DiceRollTimer {
+    timer: Timer,
+}
+
+pub(crate) fn event_dice_rolls_complete(
+    mut commands: Commands,
+    mut dice_roll_timer_query: Query<(Entity, &mut DiceRollTimer)>,
+    time: Res<Time>,
+    mut game: ResMut<game::Game>,
+) {
+    for (entity, mut fuse_timer) in dice_roll_timer_query.iter_mut() {
+        fuse_timer.timer.tick(time.delta());
+
+        if fuse_timer.timer.finished() {
+            let last_log_entry = game.game_log.last_mut().unwrap();
+            let mut dice_rolls = last_log_entry.dice_rolls.clone();
+
+            if dice_rolls[0] == dice_rolls[1] {
+                dice_rolls.push(dice_rolls[0]);
+                dice_rolls.push(dice_rolls[0]);
+            }
+
+            game.dice_rolls = dice_rolls;
+            print!("dice_rolls: {:?}", game.dice_rolls);
+            commands.entity(entity).despawn();
+
+            commands.insert_resource(GameUIState::SelectPieceToMove);
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Resource, Debug, PartialEq, Eq)]
+enum GameUIState {
+    None,
+    SelectPieceToMove,
+    SelectPiecePosition,
+}
+
+fn hightlight_choosable_pieces(
+    mut commands: Commands,
+    game: Res<game::Game>,
+    game_ui_state: Res<GameUIState>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut query: Query<(Entity, &Piece)>,
+) {
+    if *game_ui_state.into_inner() != GameUIState::SelectPieceToMove {
+        return;
+    }
+
+    let (choosable_points, _) = game.get_choosable_pieces();
+
+    for (entity, piece) in &mut query.iter_mut() {
+        for choosable_point in choosable_points.iter() {
+            if piece.position == choosable_point[0] && piece.row == choosable_point[1] {
+                let material = materials.add(Color::RED.into());
+                commands.entity(entity).insert(material);
+            }
         }
     }
 }
