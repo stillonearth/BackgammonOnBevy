@@ -2,7 +2,7 @@
 
 Bevy Game Jam #3 entry!
 
-[Uploading Bevy App_001.png…]()
+![Bevy App_001](https://user-images.githubusercontent.com/97428129/229629233-eec098bf-ac35-4a9a-a889-df5775b313fa.png)
 
 ## Copyrights
 
