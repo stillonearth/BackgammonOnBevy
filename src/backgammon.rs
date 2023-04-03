@@ -217,6 +217,7 @@ impl Board {
 pub struct Game {
     pub board: Board,
     pub dice_rolls: Vec<usize>,
+    pub dice_rolled: bool,
     pub player: Color,
 }
 
@@ -327,6 +328,7 @@ impl Game {
             },
             dice_rolls: vec![0, 0],
             player: Color::White,
+            dice_rolled: false,
         }
     }
 
@@ -342,6 +344,7 @@ impl Game {
 
     fn switch_turn(&mut self) {
         self.player = self.player.opposite();
+        self.dice_rolled = false;
     }
 
     fn highest_point_in_home_zone(&self) -> (usize, i32) {

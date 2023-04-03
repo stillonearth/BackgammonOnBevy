@@ -23,7 +23,7 @@ fn main() {
         .insert_resource(DicePluginSettings {
             render_size: (640, 640),
             number_of_fields: 1,
-            dice_scale: 0.2,
+            dice_scale: 0.15,
             start_position: Vec3::new(-1.0, 0.0, -0.3),
             ..default()
         })
@@ -38,9 +38,9 @@ fn main() {
         //     speed: 12.0,          // default: 12.0
         // })
         .add_startup_system(spawn_board)
-        // .add_startup_system(spawn_pieces)
+        .add_startup_system(spawn_pieces)
         .add_startup_system(setup_ui)
-        .add_system(button_system)
+        .add_system(ui_interactive)
         .run();
 }
 
@@ -64,11 +64,13 @@ fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
         .into(),
         ..default()
     });
-    commands.spawn(SceneBundle {
-        scene: asset_server.load("models/board.glb#Scene0"),
-        transform: Transform::from_xyz(0.0, 0.03, 0.0),
-        ..default()
-    });
+    commands
+        .spawn(SceneBundle {
+            scene: asset_server.load("models/board.glb#Scene0"),
+            transform: Transform::from_xyz(0.0, 0.03, 0.0),
+            ..default()
+        })
+        .insert(Name::new("Board"));
 }
 
 pub fn spawn_pieces(
@@ -101,7 +103,7 @@ pub fn spawn_pieces(
                 transform,
                 ..Default::default()
             };
-            commands.spawn(bundle);
+            commands.spawn(bundle).insert(Name::new("Piece"));
         }
     }
 }
@@ -152,13 +154,66 @@ const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
 const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
 const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
 
+#[derive(Component)]
+struct LabelPlayerTurn;
+
+#[derive(Component)]
+struct ButtonRollDice;
+
 fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
         .spawn(NodeBundle {
             style: Style {
                 size: Size::width(Val::Percent(100.0)),
-                align_items: AlignItems::Center,
+                align_items: AlignItems::Start,
                 justify_content: JustifyContent::Center,
+                position_type: PositionType::Absolute,
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|parent| {
+            parent.spawn(TextBundle::from_section(
+                "BackgammonOnBevy",
+                TextStyle {
+                    font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                    font_size: 60.0,
+                    color: Color::rgb(0.9, 0.9, 0.9),
+                },
+            ));
+        })
+        .insert(Name::new("Title"));
+
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                size: Size::width(Val::Percent(100.0)),
+                align_items: AlignItems::End,
+                justify_content: JustifyContent::Start,
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|parent| {
+            parent
+                .spawn(TextBundle::from_section(
+                    "Turn: White",
+                    TextStyle {
+                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                        font_size: 40.0,
+                        color: Color::rgb(0.9, 0.9, 0.9),
+                    },
+                ))
+                .insert(LabelPlayerTurn);
+        })
+        .insert(Name::new("Title"));
+
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                size: Size::width(Val::Percent(100.0)),
+                align_items: AlignItems::End,
+                justify_content: JustifyContent::FlexEnd,
                 ..default()
             },
             ..default()
@@ -184,17 +239,22 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                             color: Color::rgb(0.9, 0.9, 0.9),
                         },
                     ));
-                });
-        });
+                })
+                .insert(ButtonRollDice);
+        })
+        .insert(Name::new("BottomBar"));
 }
 
 #[allow(clippy::type_complexity)]
-fn button_system(
+fn ui_interactive(
     mut interaction_query: Query<
         (Entity, &Interaction, &mut BackgroundColor, &Children),
         (Changed<Interaction>, With<Button>),
     >,
+    mut player_turn_label_query: Query<&mut Text, With<LabelPlayerTurn>>,
+    mut button_roll_dice_query: Query<&mut Visibility, With<ButtonRollDice>>,
     mut ev_dice_started: EventWriter<DiceRollStartEvent>,
+    mut game: ResMut<backgammon::Game>,
 ) {
     for (_entity, interaction, mut color, _) in &mut interaction_query {
         match *interaction {
@@ -204,6 +264,7 @@ fn button_system(
                 let num_dice: Vec<usize> = vec![2, 2];
 
                 ev_dice_started.send(DiceRollStartEvent { num_dice });
+                game.dice_rolled = true;
             }
             Interaction::Hovered => {
                 *color = HOVERED_BUTTON.into();
@@ -211,6 +272,18 @@ fn button_system(
             Interaction::None => {
                 *color = NORMAL_BUTTON.into();
             }
+        }
+    }
+
+    for mut text in &mut player_turn_label_query.iter_mut() {
+        text.sections[0].value = format!("Turn: {:?}", game.player);
+    }
+
+    for mut visibility in &mut button_roll_dice_query.iter_mut() {
+        if game.dice_rolled {
+            *visibility = Visibility::Hidden;
+        } else {
+            *visibility = Visibility::Inherited;
         }
     }
 }
