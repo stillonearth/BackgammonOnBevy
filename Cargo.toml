@@ -14,3 +14,5 @@ bevy_rapier3d = { version = "0.21.0", features = [
     "simd-stable",
     "debug-render",
 ] }
+bevy_mod_picking = "0.12"
+itertools = "0.10.5"

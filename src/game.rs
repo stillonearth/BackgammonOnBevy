@@ -1,19 +1,20 @@
 use bevy::prelude::Resource;
+use itertools::Itertools;
 use rand::Rng;
 use std::{io, ops::Range};
 
 // Define the type of game piece.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Color {
-    White,
-    Black,
+    WHITE,
+    BLACK,
 }
 
 impl Color {
     fn opposite(&self) -> Color {
         match self {
-            Color::White => Color::Black,
-            Color::Black => Color::White,
+            Color::WHITE => Color::BLACK,
+            Color::BLACK => Color::WHITE,
         }
     }
 }
@@ -26,13 +27,13 @@ pub struct Board {
 
 impl Board {
     fn is_player_home_complete(&self, color: Color) -> bool {
-        let mut home_board = if color == Color::White { 18..24 } else { 0..6 };
+        let mut home_board = if color == Color::WHITE { 18..24 } else { 0..6 };
         let home_of_same_color = home_board.all(|i| {
             let clr = self.get_point_color(i as usize);
             clr.is_none() || clr.unwrap() == color
         });
 
-        let mut rest_of_board = if color == Color::White { 0..18 } else { 6..24 };
+        let mut rest_of_board = if color == Color::WHITE { 0..18 } else { 6..24 };
         let rest_of_board_is_empty = rest_of_board.all(|i| {
             let clr = self.get_point_color(i as usize);
             clr.is_none() || clr.unwrap() != color
@@ -137,7 +138,7 @@ impl Board {
         }
 
         // Проверяем, что точка назначения находится в допустимой зоне для хода
-        let direction = if player == Color::White { 1 } else { -1 };
+        let direction = if player == Color::WHITE { 1 } else { -1 };
         if to_point >= 24 || to_point == 0 || to_point == 23 {
             return false;
         }
@@ -156,8 +157,8 @@ impl Board {
 
         match point_count {
             0 => None,
-            _ if point_count > 0 => Some(Color::White),
-            _ => Some(Color::Black),
+            _ if point_count > 0 => Some(Color::WHITE),
+            _ => Some(Color::BLACK),
         }
     }
 
@@ -167,15 +168,15 @@ impl Board {
 
     pub fn opposite_bar_index(&self, color: Color) -> usize {
         match color {
-            Color::White => 1,
-            Color::Black => 0,
+            Color::WHITE => 1,
+            Color::BLACK => 0,
         }
     }
 
     fn get_index(&self, color: Color, index: usize, dice_roll_value: usize) -> usize {
         let mut idx = match color {
-            Color::White => index + dice_roll_value,
-            Color::Black => index.saturating_sub(dice_roll_value),
+            Color::WHITE => index + dice_roll_value,
+            Color::BLACK => index.saturating_sub(dice_roll_value),
         };
 
         if idx >= 24 {
@@ -187,7 +188,7 @@ impl Board {
 
     #[allow(dead_code)]
     fn home(&self, player: Color) -> Range<usize> {
-        if player == Color::White {
+        if player == Color::WHITE {
             18..24
         } else {
             0..6
@@ -205,11 +206,15 @@ impl Board {
     }
 
     fn direction(&self, player: Color) -> i32 {
-        if player == Color::White {
+        if player == Color::WHITE {
             1
         } else {
             -1
         }
+    }
+
+    pub fn get_next_free_row(&self, position: usize) -> usize {
+        self.points[position].unsigned_abs() as usize + 1
     }
 }
 
@@ -256,6 +261,24 @@ impl Game {
         moves
     }
 
+    pub fn get_possible_moves_for_piece(&self, player: Color, piece: usize) -> Vec<usize> {
+        let unique_rolls: Vec<usize> = self
+            .dice_rolls
+            .clone()
+            .iter()
+            .unique()
+            .map(|e| *e)
+            .collect_vec();
+
+        let possible_moves = self.get_possible_moves(player, unique_rolls);
+
+        return possible_moves
+            .iter()
+            .filter(|(from, _)| *from == piece)
+            .map(|(_, to)| *to)
+            .collect();
+    }
+
     pub fn get_choosable_pieces(&self) -> (Vec<[usize; 2]>, [usize; 2]) {
         let mut choosable_pieces_on_board: Vec<[usize; 2]> = vec![];
         let choosable_bar_pieces = [0, 0];
@@ -264,9 +287,9 @@ impl Game {
         for i in 0..24 {
             let point_count = self.board.points[i];
 
-            if point_count < 0 && self.player != Color::Black {
+            if point_count < 0 && self.player != Color::BLACK {
                 continue;
-            } else if point_count > 0 && self.player != Color::White {
+            } else if point_count > 0 && self.player != Color::WHITE {
                 continue;
             } else if point_count == 0 {
                 continue;
@@ -356,7 +379,7 @@ impl Game {
                 bar: [0, 0],
             },
             dice_rolls: vec![],
-            player: Color::White,
+            player: Color::WHITE,
             dice_rolled: false,
             game_log: vec![],
         }
@@ -364,9 +387,9 @@ impl Game {
 
     fn get_winner(&self) -> Option<Color> {
         if self.board.points[18..24].iter().all(|&x| x == 0) {
-            Some(Color::White)
+            Some(Color::WHITE)
         } else if self.board.points[0..6].iter().all(|&x| x == 0) {
-            Some(Color::Black)
+            Some(Color::BLACK)
         } else {
             None
         }
@@ -395,7 +418,7 @@ impl Game {
 
     #[allow(dead_code)]
     fn bear_off_piece(&mut self, from: i32, roll: i32) {
-        let direction = if self.player == Color::White { 1 } else { -1 };
+        let direction = if self.player == Color::WHITE { 1 } else { -1 };
         let index = from - direction;
         let value = self.board.points[index as usize];
 
