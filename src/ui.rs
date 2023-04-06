@@ -3,19 +3,11 @@ use bevy_dice::*;
 
 use std::time::Duration;
 
-use crate::{events::DiceRollTimer, game, spawn_piece, GameResources, Piece};
+use crate::{events::DiceRollTimer, game};
 
 const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
 const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
 const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
-
-#[allow(dead_code)]
-#[derive(Resource, Debug, PartialEq, Eq)]
-pub(crate) enum GameUIState {
-    None,
-    SelectPieceToMove,
-    SelectPiecePosition,
-}
 
 #[derive(Component)]
 pub(crate) struct LabelPlayerTurn;
@@ -187,34 +179,6 @@ pub(crate) fn ui_logic(
             *visibility = Visibility::Hidden;
         } else {
             *visibility = Visibility::Inherited;
-        }
-    }
-}
-
-pub(crate) fn hightlight_choosable_pieces(
-    mut commands: Commands,
-    game: Res<game::Game>,
-    game_ui_state: Res<GameUIState>,
-    mut query: Query<(Entity, &Piece)>,
-    game_resources: Res<GameResources>,
-) {
-    if *game_ui_state.into_inner() != GameUIState::SelectPieceToMove {
-        return;
-    }
-
-    let (choosable_points, _) = game.get_choosable_pieces();
-
-    for (entity, piece) in &mut query.iter_mut() {
-        for choosable_point in choosable_points.iter() {
-            if piece.position == choosable_point[0] && piece.row == choosable_point[1] {
-                if piece.highlighted {
-                    continue;
-                }
-                commands.entity(entity).despawn();
-                let mut new_piece = *piece;
-                new_piece.highlighted = true;
-                spawn_piece(&mut commands, new_piece, game_resources.clone());
-            }
         }
     }
 }

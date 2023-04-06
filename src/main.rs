@@ -14,12 +14,14 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_mod_picking::*;
 use bevy_rapier3d::prelude::*;
 
-use events::{event_dice_roll_result, event_dice_rolls_complete, handle_piece_picking_event};
-use ui::{hightlight_choosable_pieces, ui_logic, GameUIState};
+use events::{
+    event_dice_roll_result, event_dice_rolls_complete, handle_display_possible_moves,
+    handle_hightlight_choosable_pieces, handle_move_piece_event, handle_piece_picking,
+    DisplayPossibleMovesEvent, HighlightPickablePiecesEvent, MovePieceEvent,
+};
+use ui::ui_logic;
 
 fn main() {
-    let game = game::Game::new();
-
     App::new()
         .insert_resource(AmbientLight {
             color: Color::WHITE,
@@ -34,9 +36,10 @@ fn main() {
             ..default()
         })
         .insert_resource(DirectionalLightShadowMap { size: 4096 })
-        .insert_resource(game)
-        .insert_resource(GameUIState::None)
-        // .insert_resource(SelectedPiece { entity: None })
+        .insert_resource(game::Game::new())
+        .add_event::<HighlightPickablePiecesEvent>()
+        .add_event::<DisplayPossibleMovesEvent>()
+        .add_event::<MovePieceEvent>()
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugin(WorldInspectorPlugin::new())
@@ -48,8 +51,10 @@ fn main() {
         .add_system(ui_logic)
         .add_system(event_dice_roll_result)
         .add_system(event_dice_rolls_complete)
-        .add_system(hightlight_choosable_pieces)
-        .add_system(handle_piece_picking_event.in_base_set(CoreSet::PostUpdate))
+        .add_system(handle_hightlight_choosable_pieces)
+        .add_system(handle_piece_picking.in_base_set(CoreSet::PostUpdate))
+        .add_system(handle_display_possible_moves)
+        .add_system(handle_move_piece_event)
         .run();
 }
 
@@ -121,6 +126,7 @@ pub(crate) struct Piece {
     color: game::Color,
     highlighted: bool,
     candidate: bool,
+    chosen: bool,
 }
 
 impl Piece {
@@ -207,7 +213,7 @@ pub(crate) fn spawn_piece(commands: &mut Commands, piece: Piece, game_resources:
 
 pub(crate) fn spawn_pieces(
     mut commands: Commands,
-    game: Res<game::Game>,
+    game: ResMut<game::Game>,
     game_resources: Res<GameResources>,
 ) {
     for (position, piece) in game.board.points.iter().enumerate() {
@@ -228,14 +234,10 @@ pub(crate) fn spawn_pieces(
                     color,
                     highlighted: false,
                     candidate: false,
+                    chosen: false,
                 },
                 game_resources.clone(),
             );
         }
     }
 }
-
-// #[derive(Resource, Default)]
-// pub struct SelectedPiece {
-//     pub entity: Option<Entity>,
-// }

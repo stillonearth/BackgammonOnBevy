@@ -96,22 +96,24 @@ impl Board {
     pub fn make_move(
         &mut self,
         player: Color,
-        from_point: usize,
-        to_point: usize,
+        from_position: usize,
+        to_position: usize,
     ) -> Result<(), String> {
+        println!("{player:?}: {from_position} -> {to_position}");
+
         // check if move is valid
-        if !self.can_move_piece(player, from_point, to_point) {
+        if !self.can_move_piece(player, from_position, to_position) {
             return Err(String::from("Invalid move"));
         }
 
         let direction = self.direction(player);
-        self.points[from_point] -= direction;
+        self.points[from_position] -= direction;
 
-        if self.points[to_point] == -direction {
-            self.points[to_point] = direction;
+        if self.points[to_position] == -direction {
+            self.points[to_position] = direction;
             self.bar[self.opposite_bar_index(player)] += 1;
         } else {
-            self.points[to_point] += direction;
+            self.points[to_position] += direction;
         }
 
         Ok(())
@@ -146,6 +148,10 @@ impl Board {
             return false;
         }
         if to_point_color == Some(opposite_color) && to_point > from_point && direction == -1 {
+            return false;
+        }
+
+        if self.points[to_point].abs() >= 5 {
             return false;
         }
 
@@ -383,7 +389,7 @@ impl Game {
                 bar: [0, 0],
             },
             dice_rolls: vec![],
-            player: Color::White,
+            player: Color::Black,
             dice_rolled: false,
             game_log: vec![],
         }
