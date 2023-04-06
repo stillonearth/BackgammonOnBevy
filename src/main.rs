@@ -1,5 +1,9 @@
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
+mod events;
+mod game;
+mod ui;
 
+use crate::ui::setup_ui;
 use bevy::{
     pbr::{CascadeShadowConfigBuilder, DirectionalLightShadowMap},
     prelude::*,
@@ -10,11 +14,8 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_mod_picking::*;
 use bevy_rapier3d::prelude::*;
 
-use game::GameLogEntry;
-
-use std::time::Duration;
-
-mod game;
+use events::{event_dice_roll_result, event_dice_rolls_complete, handle_piece_picking_event};
+use ui::{hightlight_choosable_pieces, ui_logic, GameUIState};
 
 fn main() {
     let game = game::Game::new();
@@ -84,7 +85,7 @@ fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 #[derive(Clone, Debug, Resource)]
-struct GameResources {
+pub(crate) struct GameResources {
     white_material: Handle<StandardMaterial>,
     black_material: Handle<StandardMaterial>,
     highlighted_material: Handle<StandardMaterial>,
@@ -114,7 +115,7 @@ impl FromWorld for GameResources {
 }
 
 #[derive(Component, Clone, Copy)]
-struct Piece {
+pub(crate) struct Piece {
     row: usize,
     position: usize,
     color: game::Color,
@@ -166,7 +167,7 @@ impl Piece {
     }
 }
 
-fn spawn_piece(commands: &mut Commands, piece: Piece, game_resources: GameResources) {
+pub(crate) fn spawn_piece(commands: &mut Commands, piece: Piece, game_resources: GameResources) {
     let [x, y] = piece.board_coordinates();
 
     let mut transform = Transform::from_xyz(0.0, 0.0, 0.0)
@@ -176,8 +177,8 @@ fn spawn_piece(commands: &mut Commands, piece: Piece, game_resources: GameResour
     transform.translation = Vec3::new(y, 0.03, x);
 
     let mut material = match piece.color {
-        game::Color::WHITE => game_resources.white_material.clone(),
-        game::Color::BLACK => game_resources.black_material.clone(),
+        game::Color::White => game_resources.white_material.clone(),
+        game::Color::Black => game_resources.black_material.clone(),
     };
 
     if piece.highlighted {
@@ -189,7 +190,7 @@ fn spawn_piece(commands: &mut Commands, piece: Piece, game_resources: GameResour
     }
 
     let bundle = PbrBundle {
-        mesh: game_resources.checkers_model.clone(),
+        mesh: game_resources.checkers_model,
         material,
         transform,
         ..Default::default()
@@ -204,11 +205,15 @@ fn spawn_piece(commands: &mut Commands, piece: Piece, game_resources: GameResour
     }
 }
 
-fn spawn_pieces(mut commands: Commands, game: Res<game::Game>, game_resources: Res<GameResources>) {
+pub(crate) fn spawn_pieces(
+    mut commands: Commands,
+    game: Res<game::Game>,
+    game_resources: Res<GameResources>,
+) {
     for (position, piece) in game.board.points.iter().enumerate() {
-        let mut color = game::Color::WHITE;
+        let mut color = game::Color::White;
         if *piece < 0 {
-            color = game::Color::BLACK;
+            color = game::Color::Black;
         }
 
         let position = position + 1_usize;
@@ -230,314 +235,7 @@ fn spawn_pieces(mut commands: Commands, game: Res<game::Game>, game_resources: R
     }
 }
 
-const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
-const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
-const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
-
-#[derive(Component)]
-struct LabelPlayerTurn;
-
-#[derive(Component)]
-struct ButtonRollDice;
-
-#[derive(Component)]
-struct LabelMoveStack;
-
-fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands
-        .spawn(NodeBundle {
-            style: Style {
-                size: Size::width(Val::Percent(100.0)),
-                align_items: AlignItems::Start,
-                justify_content: JustifyContent::Center,
-                position_type: PositionType::Absolute,
-                ..default()
-            },
-            ..default()
-        })
-        .with_children(|parent| {
-            parent.spawn(TextBundle::from_section(
-                "BackgammonOnBevy",
-                TextStyle {
-                    font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                    font_size: 60.0,
-                    color: Color::rgb(0.9, 0.9, 0.9),
-                },
-            ));
-        })
-        .insert(Name::new("Title"));
-
-    commands
-        .spawn(NodeBundle {
-            style: Style {
-                size: Size::width(Val::Percent(100.0)),
-                align_items: AlignItems::End,
-                justify_content: JustifyContent::Start,
-                ..default()
-            },
-            ..default()
-        })
-        .with_children(|parent| {
-            parent
-                .spawn(TextBundle::from_section(
-                    "Turn: White",
-                    TextStyle {
-                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                        font_size: 40.0,
-                        color: Color::rgb(0.9, 0.9, 0.9),
-                    },
-                ))
-                .insert(LabelPlayerTurn);
-        })
-        .insert(Name::new("TurnIndicator"));
-
-    commands
-        .spawn(NodeBundle {
-            style: Style {
-                size: Size::width(Val::Percent(100.0)),
-                align_items: AlignItems::End,
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            ..default()
-        })
-        .with_children(|parent| {
-            parent
-                .spawn(TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                        font_size: 40.0,
-                        color: Color::rgb(0.9, 0.9, 0.9),
-                    },
-                ))
-                .insert(LabelMoveStack);
-        })
-        .insert(Name::new("Move Stack"));
-
-    commands
-        .spawn(NodeBundle {
-            style: Style {
-                size: Size::width(Val::Percent(100.0)),
-                align_items: AlignItems::End,
-                justify_content: JustifyContent::FlexEnd,
-                ..default()
-            },
-            ..default()
-        })
-        .with_children(|parent| {
-            parent
-                .spawn(ButtonBundle {
-                    style: Style {
-                        size: Size::new(Val::Px(150.0), Val::Px(65.0)),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    background_color: NORMAL_BUTTON.into(),
-                    ..default()
-                })
-                .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "Roll Dice",
-                        TextStyle {
-                            font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                            font_size: 40.0,
-                            color: Color::rgb(0.9, 0.9, 0.9),
-                        },
-                    ));
-                })
-                .insert(ButtonRollDice);
-        })
-        .insert(Name::new("BottomBar"));
-}
-
-#[allow(clippy::type_complexity)]
-fn ui_logic(
-    mut commands: Commands,
-    mut interaction_query: Query<
-        (Entity, &Interaction, &mut BackgroundColor, &Children),
-        (Changed<Interaction>, With<Button>),
-    >,
-    mut label_set: ParamSet<(
-        Query<&mut Text, With<LabelPlayerTurn>>,
-        Query<&mut Text, With<LabelMoveStack>>,
-    )>,
-    mut button_roll_dice_query: Query<&mut Visibility, With<ButtonRollDice>>,
-    mut ev_dice_started: EventWriter<DiceRollStartEvent>,
-    mut game: ResMut<game::Game>,
-) {
-    for (_entity, interaction, mut color, _) in &mut interaction_query {
-        match *interaction {
-            Interaction::Clicked => {
-                *color = PRESSED_BUTTON.into();
-
-                let num_dice: Vec<usize> = vec![2, 2];
-
-                ev_dice_started.send(DiceRollStartEvent { num_dice });
-                game.dice_rolled = true;
-
-                commands.spawn(()).insert(DiceRollTimer {
-                    timer: Timer::new(Duration::from_secs(2), TimerMode::Once),
-                });
-            }
-            Interaction::Hovered => {
-                *color = HOVERED_BUTTON.into();
-            }
-            Interaction::None => {
-                *color = NORMAL_BUTTON.into();
-            }
-        }
-    }
-
-    for mut text in &mut label_set.p0().iter_mut() {
-        text.sections[0].value = format!("Turn: {:?}", game.player);
-    }
-
-    if game.dice_rolled && !game.dice_rolls.is_empty() {
-        for mut text in &mut label_set.p1().iter_mut() {
-            text.sections[0].value = format!("Move Stack: {:?}", game.dice_rolls);
-        }
-    }
-
-    for mut visibility in &mut button_roll_dice_query.iter_mut() {
-        if game.dice_rolled {
-            *visibility = Visibility::Hidden;
-        } else {
-            *visibility = Visibility::Inherited;
-        }
-    }
-}
-
-pub(crate) fn event_dice_roll_result(
-    mut dice_rolls: EventReader<DiceRollResult>,
-    mut game: ResMut<game::Game>,
-) {
-    let player = game.player;
-    for event in dice_rolls.iter() {
-        game.game_log.push(GameLogEntry {
-            player,
-            dice_rolls: event.values[0].clone(),
-        });
-    }
-}
-
-#[derive(Component)]
-pub(crate) struct DiceRollTimer {
-    timer: Timer,
-}
-
-pub(crate) fn event_dice_rolls_complete(
-    mut commands: Commands,
-    mut dice_roll_timer_query: Query<(Entity, &mut DiceRollTimer)>,
-    time: Res<Time>,
-    mut game: ResMut<game::Game>,
-) {
-    for (entity, mut fuse_timer) in dice_roll_timer_query.iter_mut() {
-        fuse_timer.timer.tick(time.delta());
-
-        if fuse_timer.timer.finished() {
-            let last_log_entry = game.game_log.last_mut().unwrap();
-            let mut dice_rolls = last_log_entry.dice_rolls.clone();
-
-            if dice_rolls[0] == dice_rolls[1] {
-                dice_rolls.push(dice_rolls[0]);
-                dice_rolls.push(dice_rolls[0]);
-            }
-
-            game.dice_rolls = dice_rolls;
-            commands.entity(entity).despawn();
-            commands.insert_resource(GameUIState::SelectPieceToMove);
-        }
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Resource, Debug, PartialEq, Eq)]
-enum GameUIState {
-    None,
-    SelectPieceToMove,
-    SelectPiecePosition,
-}
-
-fn hightlight_choosable_pieces(
-    mut commands: Commands,
-    game: Res<game::Game>,
-    game_ui_state: Res<GameUIState>,
-    mut query: Query<(Entity, &Piece)>,
-    game_resources: Res<GameResources>,
-) {
-    if *game_ui_state.into_inner() != GameUIState::SelectPieceToMove {
-        return;
-    }
-
-    let (choosable_points, _) = game.get_choosable_pieces();
-
-    for (entity, piece) in &mut query.iter_mut() {
-        for choosable_point in choosable_points.iter() {
-            if piece.position == choosable_point[0] && piece.row == choosable_point[1] {
-                if piece.highlighted {
-                    continue;
-                }
-                commands.entity(entity).despawn();
-                let mut new_piece = (*piece).clone();
-                new_piece.highlighted = true;
-                spawn_piece(&mut commands, new_piece, game_resources.clone());
-            }
-        }
-    }
-}
-
 // #[derive(Resource, Default)]
 // pub struct SelectedPiece {
 //     pub entity: Option<Entity>,
 // }
-
-fn handle_piece_picking_event(
-    mut commands: Commands,
-    mut events: EventReader<PickingEvent>,
-    pieces_query: Query<(Entity, &Piece)>,
-    game: Res<game::Game>,
-    game_resources: Res<GameResources>,
-) {
-    for event in events.iter() {
-        match event {
-            PickingEvent::Clicked(e) => {
-                for (entity, piece) in pieces_query.iter() {
-                    if entity.index() == e.index() {
-                        println!("Clicked on piece: {:?}", entity);
-                        let possible_positions =
-                            game.get_possible_moves_for_piece(game.player, piece.position - 1);
-
-                        // Despawn possible candidates
-                        pieces_query
-                            .iter()
-                            .filter(|(_, piece)| piece.candidate)
-                            .for_each(|(entity, _)| {
-                                commands.entity(entity).despawn();
-                            });
-
-                        // Spawn new candidates
-                        for position in possible_positions.iter() {
-                            println!("Possible position: {:?}", position);
-
-                            let row = game.board.get_next_free_row(*position);
-                            spawn_piece(
-                                &mut commands,
-                                Piece {
-                                    position: *position + 1,
-                                    row,
-                                    color: game.player,
-                                    highlighted: false,
-                                    candidate: true,
-                                },
-                                game_resources.clone(),
-                            );
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-}
