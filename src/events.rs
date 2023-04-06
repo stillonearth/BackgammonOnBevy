@@ -194,7 +194,7 @@ pub(crate) fn handle_move_piece_event(
             .make_move(player, event.from - 1, event.to - 1)
             .unwrap();
 
-        let move_ = (event.to as i32 - event.from as i32).abs() as usize;
+        let move_ = (event.to as i32 - event.from as i32).unsigned_abs() as usize;
         let number_of_same_moves = game.dice_rolls.iter().filter(|&&x| x == move_).count();
         game.dice_rolls = game
             .dice_rolls
