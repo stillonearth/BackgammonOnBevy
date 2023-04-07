@@ -92,7 +92,7 @@ impl Board {
             return true;
         }
 
-        if to_point < 0 || to_point >= 24 {
+        if !(0..24).contains(&to_point) {
             return false;
         }
 
@@ -252,7 +252,7 @@ impl Game {
         if player == Color::Black {
             possible_moves.reverse();
         }
-        return possible_moves;
+        possible_moves
     }
 
     pub(crate) fn get_choosable_pieces(&self) -> (Vec<[usize; 2]>, [usize; 2]) {

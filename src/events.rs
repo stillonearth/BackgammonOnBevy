@@ -233,10 +233,10 @@ pub(crate) fn handle_move_piece_event(
     for event in display_possible_moves_event_reader.iter() {
         let player = game.player;
         game.board
-            .make_move(player, event.from - 1, event.to as i32 - 1)
+            .make_move(player, event.from - 1, event.to - 1)
             .unwrap();
 
-        let move_ = (event.to as i32 - event.from as i32).unsigned_abs() as usize;
+        let move_ = (event.to - event.from as i32).unsigned_abs() as usize;
         let number_of_same_moves = game.dice_rolls.iter().filter(|&&x| x == move_).count();
         game.dice_rolls = game
             .dice_rolls
@@ -308,7 +308,7 @@ pub(crate) fn handle_dice_roll_start_event(
 pub(crate) fn handle_turn_start_event(
     mut turn_start_event_reader: EventReader<TurnStartEvent>,
     mut query_button_roll_dice: Query<&mut Visibility, With<ButtonRollDice>>,
-    mut game: ResMut<game::Game>,
+    _game: ResMut<game::Game>,
 ) {
     for _ in turn_start_event_reader.iter() {
         for mut visibility in query_button_roll_dice.iter_mut() {
