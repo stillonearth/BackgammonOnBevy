@@ -1,7 +1,6 @@
 use bevy::prelude::Resource;
 use itertools::Itertools;
-use rand::Rng;
-use std::{io, ops::Range};
+use std::ops::Range;
 
 // Define the type of game piece.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -26,7 +25,7 @@ pub struct Board {
 }
 
 impl Board {
-    fn is_player_home_complete(&self, color: Color) -> bool {
+    pub(crate) fn is_player_home_complete(&self, color: Color) -> bool {
         let mut home_board = if color == Color::White { 18..24 } else { 0..6 };
         let home_of_same_color = home_board.all(|i| {
             let clr = self.get_point_color(i as usize);
@@ -41,66 +40,12 @@ impl Board {
         home_of_same_color && rest_of_board_is_empty
     }
 
-    fn print(&self) {
-        let points = self.points;
-
-        println!("| 13|14|15|16|17|18|   |19|20|21|22|23|24 |");
-        println!("|------------------|   |------------------|");
-        for row in 1..=5 {
-            print!("|");
-            for point in 13..=24 {
-                if points[point - 1] >= row {
-                    print!(" W ");
-                } else if points[point - 1] <= -row {
-                    print!(" B ");
-                } else {
-                    print!("   ");
-                }
-
-                if point == 18 {
-                    print!("|   |");
-                }
-
-                if point == 24 {
-                    println!("|");
-                }
-            }
-        }
-
-        println!("|------------------|   |------------------|");
-
-        for row in (1..=5).rev() {
-            print!("|");
-            for point in (1..=12).rev() {
-                if points[point - 1] >= row {
-                    print!(" W ");
-                } else if points[point - 1] <= -row {
-                    print!(" B ");
-                } else {
-                    print!("   ");
-                }
-
-                if point == 7 {
-                    print!("|   |");
-                }
-
-                if point == 1 {
-                    println!("|");
-                }
-            }
-        }
-        println!("|------------------|   |------------------|");
-        println!("| 12|11|10| 9| 8| 7|   | 6| 5| 4| 4| 2| 1 |");
-    }
-
     pub fn make_move(
         &mut self,
         player: Color,
         from_position: usize,
-        to_position: usize,
+        to_position: i32,
     ) -> Result<(), String> {
-        println!("{player:?}: {from_position} -> {to_position}");
-
         // check if move is valid
         if !self.can_move_piece(player, from_position, to_position) {
             return Err(String::from("Invalid move"));
@@ -108,6 +53,17 @@ impl Board {
 
         let direction = self.direction(player);
         self.points[from_position] -= direction;
+
+        let is_home_complete = self.is_player_home_complete(player);
+        if is_home_complete && player == Color::White && to_position >= 24 {
+            return Ok(());
+        }
+
+        if is_home_complete && player == Color::Black && to_position < 0 {
+            return Ok(());
+        }
+
+        let to_position = to_position as usize;
 
         if self.points[to_position] == -direction {
             self.points[to_position] = direction;
@@ -119,29 +75,39 @@ impl Board {
         Ok(())
     }
 
-    pub fn can_move_piece(&self, player: Color, from_point: usize, to_point: usize) -> bool {
-        // Проверяем, что на точке from_point есть хотя бы одна фишка
+    pub fn can_move_piece(&self, player: Color, from_point: usize, to_point: i32) -> bool {
         if self.get_point_count(from_point) == 0 {
             return false;
         }
 
-        // Проверяем, что фишка нужного цвета находится на точке from_point
         if self.get_point_color(from_point) != Some(player) {
             return false;
         }
 
-        // Проверяем, что на точке to_point нет более одной фишки противоположного цвета
-        let opposite_color = player.opposite();
-        let to_point_color = self.get_point_color(to_point);
-        let to_point_count = self.get_point_count(to_point);
+        let is_home_complete = self.is_player_home_complete(player);
+        if is_home_complete && player == Color::White && to_point >= 23 {
+            return true;
+        }
+        if is_home_complete && player == Color::Black && to_point < 0 {
+            return true;
+        }
 
-        if to_point_color == Some(opposite_color) && to_point_count > 1 {
+        if to_point < 0 || to_point >= 24 {
             return false;
         }
 
-        // Проверяем, что точка назначения находится в допустимой зоне для хода
+        let opposite_color = player.opposite();
+        let to_point_color = self.get_point_color(to_point as usize);
+        let to_point_count = self.get_point_count(to_point as usize);
+
+        if to_point_color == Some(opposite_color) && to_point_count > 0 {
+            return false;
+        }
+
+        let to_point: usize = to_point as usize;
+
         let direction = if player == Color::White { 1 } else { -1 };
-        if to_point >= 24 || to_point == 0 || to_point == 23 {
+        if to_point >= 24 {
             return false;
         }
         if to_point_color == Some(opposite_color) && to_point < from_point && direction == 1 {
@@ -179,17 +145,11 @@ impl Board {
         }
     }
 
-    fn get_index(&self, color: Color, index: usize, dice_roll_value: usize) -> usize {
-        let mut idx = match color {
-            Color::White => index + dice_roll_value,
-            Color::Black => index.saturating_sub(dice_roll_value),
-        };
-
-        if idx >= 24 {
-            idx -= 24;
+    fn get_index(&self, color: Color, index: usize, dice_roll_value: usize) -> i32 {
+        match color {
+            Color::White => index as i32 + dice_roll_value as i32,
+            Color::Black => index as i32 - dice_roll_value as i32,
         }
-
-        idx
     }
 
     #[allow(dead_code)]
@@ -231,7 +191,7 @@ pub struct GameLogEntry {
 }
 
 #[derive(Resource)]
-pub struct Game {
+pub(crate) struct Game {
     pub board: Board,
     pub dice_rolls: Vec<usize>,
     pub dice_rolled: bool,
@@ -246,13 +206,17 @@ impl Default for Game {
 }
 
 impl Game {
-    pub fn can_move(&self, player: Color) -> bool {
+    pub(crate) fn can_move(&self, player: Color) -> bool {
         let possible_moves = self.get_possible_moves(player, self.dice_rolls.clone());
         !possible_moves.is_empty()
     }
 
-    pub fn get_possible_moves(&self, player: Color, dice_rolls: Vec<usize>) -> Vec<(usize, usize)> {
-        let mut moves: Vec<(usize, usize)> = vec![];
+    pub(crate) fn get_possible_moves(
+        &self,
+        player: Color,
+        dice_rolls: Vec<usize>,
+    ) -> Vec<(usize, i32)> {
+        let mut moves: Vec<(usize, i32)> = vec![];
         let indices = self.board.get_points_for_color(player);
 
         for &index in indices.iter() {
@@ -267,7 +231,7 @@ impl Game {
         moves
     }
 
-    pub fn get_possible_moves_for_piece(&self, player: Color, piece: usize) -> Vec<usize> {
+    pub(crate) fn get_possible_moves_for_piece(&self, player: Color, piece: usize) -> Vec<i32> {
         let unique_rolls: Vec<usize> = self
             .dice_rolls
             .clone()
@@ -278,16 +242,24 @@ impl Game {
 
         let possible_moves = self.get_possible_moves(player, unique_rolls);
 
-        return possible_moves
+        let mut possible_moves: Vec<i32> = possible_moves
             .iter()
             .filter(|(from, _)| *from == piece)
             .map(|(_, to)| *to)
             .collect();
+
+        possible_moves.sort();
+        if player == Color::Black {
+            possible_moves.reverse();
+        }
+        return possible_moves;
     }
 
-    pub fn get_choosable_pieces(&self) -> (Vec<[usize; 2]>, [usize; 2]) {
+    pub(crate) fn get_choosable_pieces(&self) -> (Vec<[usize; 2]>, [usize; 2]) {
         let mut choosable_pieces_on_board: Vec<[usize; 2]> = vec![];
         let choosable_bar_pieces = [0, 0];
+
+        let possible_moves = self.get_possible_moves(self.player, self.dice_rolls.clone());
 
         // fill choosable_pieces_on_board with pieces that can be chosen according to their color (value)
         for i in 0..24 {
@@ -305,73 +277,20 @@ impl Game {
                 continue;
             }
 
+            let position_in_possible_moveset =
+                possible_moves.iter().filter(|(from, _)| *from == i).count();
+
+            if position_in_possible_moveset == 0 {
+                continue;
+            }
+
             choosable_pieces_on_board.push([i + 1, point_count.unsigned_abs() as usize]);
         }
 
         (choosable_pieces_on_board, choosable_bar_pieces)
     }
 
-    fn get_player_move(&self) -> Option<(usize, usize)> {
-        let possible_moves = self.get_possible_moves(self.player, self.dice_rolls.clone());
-        let mut valid_move = false;
-        let mut from_index = 0;
-        let mut to_index = 0;
-
-        while !valid_move {
-            println!(
-                "Available moves for {:?} with dice roll {:?}: {:?}",
-                self.player, self.dice_rolls, possible_moves
-            );
-            println!("Enter the index of the piece you want to move:");
-
-            let mut input = String::new();
-            io::stdin()
-                .read_line(&mut input)
-                .expect("Failed to read line");
-
-            match input.trim().parse::<usize>() {
-                Ok(index) if possible_moves.iter().any(|(i, _)| *i == index) => {
-                    from_index = index;
-                    println!("Enter the index to move the piece to:");
-
-                    let mut input = String::new();
-                    io::stdin()
-                        .read_line(&mut input)
-                        .expect("Failed to read line");
-
-                    match input.trim().parse::<usize>() {
-                        Ok(index) if possible_moves.iter().any(|(_, j)| *j == index) => {
-                            to_index = index;
-                            valid_move = true;
-                        }
-                        Ok(index) => {
-                            println!("Invalid move destination: {index}");
-                        }
-                        Err(_) => {
-                            println!("Invalid input, please enter a number");
-                        }
-                    }
-                }
-                Ok(index) => {
-                    println!("Invalid piece index: {index}");
-                }
-                Err(_) => {
-                    println!("Invalid input, please enter a number");
-                }
-            }
-        }
-
-        Some((from_index, to_index))
-    }
-
-    fn roll_dice(&mut self) {
-        self.dice_rolls = vec![
-            rand::thread_rng().gen_range(1..=6),
-            rand::thread_rng().gen_range(1..=6),
-        ];
-    }
-
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let mut points = [0; 24];
         points[0] = 2;
         points[23] = -2;
@@ -382,6 +301,14 @@ impl Game {
         points[12] = -5;
         points[11] = 5;
 
+        // points[18] = 5;
+        // points[19] = 5;
+        // points[20] = 5;
+
+        // points[0] -= 5;
+        // points[1] -= 5;
+        // points[2] -= 5;
+
         // Create a new game instance with an empty board and start with player 1
         Game {
             board: Board {
@@ -389,29 +316,19 @@ impl Game {
                 bar: [0, 0],
             },
             dice_rolls: vec![],
-            player: Color::Black,
+            player: Color::White,
             dice_rolled: false,
             game_log: vec![],
         }
     }
 
-    fn get_winner(&self) -> Option<Color> {
-        if self.board.points[18..24].iter().all(|&x| x == 0) {
-            Some(Color::White)
-        } else if self.board.points[0..6].iter().all(|&x| x == 0) {
-            Some(Color::Black)
-        } else {
-            None
-        }
-    }
-
-    fn switch_turn(&mut self) {
+    pub(crate) fn switch_turn(&mut self) {
         self.player = self.player.opposite();
         self.dice_rolled = false;
         self.dice_rolls = vec![];
     }
 
-    fn highest_point_in_home_zone(&self) -> (usize, i32) {
+    pub(crate) fn highest_point_in_home_zone(&self) -> (usize, i32) {
         let mut highest_index = 0;
         let mut highest_value = 0;
         for i in self.board.home(self.player) {
@@ -424,10 +341,8 @@ impl Game {
         (highest_index, highest_value)
     }
 
-    fn bear_off(&self) {}
-
     #[allow(dead_code)]
-    fn bear_off_piece(&mut self, from: i32, roll: i32) {
+    pub(crate) fn bear_off_piece(&mut self, from: i32, roll: i32) {
         let direction = if self.player == Color::White { 1 } else { -1 };
         let index = from - direction;
         let value = self.board.points[index as usize];
@@ -453,49 +368,9 @@ impl Game {
         }
     }
 
-    fn is_over(&self) -> bool {
+    pub(crate) fn is_over(&self) -> bool {
         let player1_borne_off = self.board.points[0..18].iter().all(|&x| x == 0);
         let player2_borne_off = self.board.points[6..24].iter().all(|&x| x == 0);
         player1_borne_off || player2_borne_off
     }
-}
-
-#[allow(dead_code)]
-fn play_game() {
-    // Create a new game instance
-    let mut game = Game::new();
-
-    // Start the main game loop
-    while !game.is_over() {
-        // Print the current board state and player turn
-        game.board.print();
-        println!("It's {:?}'s turn", game.player);
-
-        game.roll_dice();
-        // Check if the current player can move any pieces
-        if game.can_move(game.player) {
-            // Bear off any pieces that have reached the end of the home board
-            if game.board.is_player_home_complete(game.player) {
-                game.bear_off();
-                return;
-            }
-
-            // Get the player's move
-            let player_move = game.get_player_move();
-
-            if let Some((from, to)) = player_move {
-                game.board.make_move(game.player, from, to).unwrap();
-            }
-
-            // Make the move
-        } else {
-            println!("{:?} can't move, switching turn", game.player);
-
-            // Switch the turn to the other player
-            game.switch_turn();
-        }
-    }
-
-    // Print the winner
-    println!("Game over! {:?} wins", game.get_winner());
 }

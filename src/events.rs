@@ -4,11 +4,19 @@ use bevy_mod_picking::PickingEvent;
 
 use crate::{
     game::{self, GameLogEntry},
-    spawn_piece, spawn_pieces, GameResources, Piece,
+    spawn_piece, spawn_pieces,
+    ui::{ButtonBearOff, ButtonRollDice, LabelGameOver, LabelMoveStack, LabelPlayerTurn},
+    GameResources, Piece,
 };
 
 #[derive(Default, Clone, Resource)]
 pub struct HighlightPickablePiecesEvent;
+
+#[allow(dead_code)]
+#[derive(Clone, Resource)]
+pub struct TurnStartEvent {
+    player: game::Color,
+}
 
 #[derive(Default, Clone, Resource)]
 pub struct DisplayPossibleMovesEvent {
@@ -19,7 +27,15 @@ pub struct DisplayPossibleMovesEvent {
 #[derive(Default, Clone, Resource)]
 pub struct MovePieceEvent {
     pub(crate) from: usize,
-    pub(crate) to: usize,
+    pub(crate) to: i32,
+}
+
+#[derive(Default, Clone, Resource)]
+pub struct MovePieceEndEvent;
+
+#[derive(Clone, Resource)]
+pub struct GameOverEvent {
+    player: game::Color,
 }
 
 #[derive(Component)]
@@ -45,6 +61,7 @@ pub(crate) fn event_dice_rolls_complete(
     mut dice_roll_timer_query: Query<(Entity, &mut DiceRollTimer)>,
     time: Res<Time>,
     mut game: ResMut<game::Game>,
+    mut turn_start_event_writer: EventWriter<TurnStartEvent>,
     mut highlight_pickable_pieces_event_writer: EventWriter<HighlightPickablePiecesEvent>,
 ) {
     for (entity, mut fuse_timer) in dice_roll_timer_query.iter_mut() {
@@ -61,14 +78,25 @@ pub(crate) fn event_dice_rolls_complete(
 
             game.dice_rolls = dice_rolls;
             commands.entity(entity).despawn();
-            highlight_pickable_pieces_event_writer.send(HighlightPickablePiecesEvent);
+
+            let possible_moves = game.get_possible_moves(game.player, game.dice_rolls.clone());
+
+            if possible_moves.is_empty() {
+                game.switch_turn();
+
+                turn_start_event_writer.send(TurnStartEvent {
+                    player: game.player,
+                });
+            } else {
+                highlight_pickable_pieces_event_writer.send(HighlightPickablePiecesEvent);
+            }
+
             break;
         }
     }
 }
 
 pub(crate) fn handle_piece_picking(
-    _commands: Commands,
     mut picking_event_reader: EventReader<PickingEvent>,
     mut pieces_query: Query<(Entity, &mut Piece)>,
     mut display_possible_moves_event_writer: EventWriter<DisplayPossibleMovesEvent>,
@@ -96,7 +124,7 @@ pub(crate) fn handle_piece_picking(
                         let chosen_piece = all_pieces.iter().find(|p| p.chosen).unwrap();
                         move_piece_event_writer.send(MovePieceEvent {
                             from: chosen_piece.position,
-                            to: piece.position,
+                            to: piece.position as i32,
                         });
                     }
                 }
@@ -109,6 +137,7 @@ pub(crate) fn handle_display_possible_moves(
     mut commands: Commands,
     mut display_possible_moves_event_reader: EventReader<DisplayPossibleMovesEvent>,
     mut pieces_query: Query<(Entity, &mut Piece)>,
+    mut button_bear_off_query: Query<(&mut Visibility, &mut ButtonBearOff)>,
     game: Res<game::Game>,
     game_resources: Res<GameResources>,
 ) {
@@ -128,13 +157,26 @@ pub(crate) fn handle_display_possible_moves(
             piece.chosen = entity.index() == event.entity.unwrap().index();
         });
 
-        // Spawn new candidates
+        for (mut visibility, mut button) in &mut button_bear_off_query.iter_mut() {
+            *visibility = Visibility::Hidden;
+            button.position_to = None;
+        }
+
         for position in possible_positions.iter() {
-            let row = game.board.get_next_free_row(*position);
+            if *position >= 24 || *position < 0 {
+                for (mut visibility, mut button) in &mut button_bear_off_query.iter_mut() {
+                    *visibility = Visibility::Inherited;
+                    button.position_to = Some(*position + 1);
+                }
+                break;
+            }
+
+            // Moves on board
+            let row = game.board.get_next_free_row(*position as usize);
             spawn_piece(
                 &mut commands,
                 Piece {
-                    position: *position + 1,
+                    position: (*position + 1) as usize,
                     row,
                     color: game.player,
                     highlighted: false,
@@ -175,11 +217,11 @@ pub(crate) fn handle_hightlight_choosable_pieces(
     }
 }
 
-#[allow(unused_variables)]
 pub(crate) fn handle_move_piece_event(
     mut commands: Commands,
     mut display_possible_moves_event_reader: EventReader<MovePieceEvent>,
     mut highlight_pickable_pieces_event_writer: EventWriter<HighlightPickablePiecesEvent>,
+    mut move_piece_end_event_writer: EventWriter<MovePieceEndEvent>,
     pieces_query: Query<(Entity, &Piece)>,
     mut game: ResMut<game::Game>,
     game_resources: Res<GameResources>,
@@ -191,7 +233,7 @@ pub(crate) fn handle_move_piece_event(
     for event in display_possible_moves_event_reader.iter() {
         let player = game.player;
         game.board
-            .make_move(player, event.from - 1, event.to - 1)
+            .make_move(player, event.from - 1, event.to as i32 - 1)
             .unwrap();
 
         let move_ = (event.to as i32 - event.from as i32).unsigned_abs() as usize;
@@ -203,8 +245,10 @@ pub(crate) fn handle_move_piece_event(
             .cloned()
             .collect();
 
-        for i in 0..number_of_same_moves - 1 {
-            game.dice_rolls.push(move_);
+        if number_of_same_moves > 1 {
+            for _ in 0..number_of_same_moves - 1 {
+                game.dice_rolls.push(move_);
+            }
         }
     }
 
@@ -217,4 +261,96 @@ pub(crate) fn handle_move_piece_event(
         commands.entity(entity).despawn();
     });
     spawn_pieces(commands, game, game_resources);
+
+    move_piece_end_event_writer.send(MovePieceEndEvent);
+}
+
+pub(crate) fn handle_move_piece_end_event(
+    mut move_piece_end_event_reader: EventReader<MovePieceEndEvent>,
+    mut turn_start_event_writer: EventWriter<TurnStartEvent>,
+    mut game_over_event_writer: EventWriter<GameOverEvent>,
+    mut game: ResMut<game::Game>,
+) {
+    if move_piece_end_event_reader.is_empty() {
+        return;
+    }
+
+    for _ in move_piece_end_event_reader.iter() {
+        if game.is_over() {
+            game_over_event_writer.send(GameOverEvent {
+                player: game.player,
+            });
+            return;
+        }
+
+        if game.can_move(game.player) {
+        } else {
+            game.switch_turn();
+
+            turn_start_event_writer.send(TurnStartEvent {
+                player: game.player,
+            });
+        }
+    }
+}
+
+pub(crate) fn handle_dice_roll_start_event(
+    mut dice_roll_start_event_reader: EventReader<DiceRollStartEvent>,
+    mut query_button_roll_dice: Query<&mut Visibility, With<ButtonRollDice>>,
+) {
+    for _ in dice_roll_start_event_reader.iter() {
+        for mut visibility in query_button_roll_dice.iter_mut() {
+            *visibility = Visibility::Hidden;
+        }
+    }
+}
+
+pub(crate) fn handle_turn_start_event(
+    mut turn_start_event_reader: EventReader<TurnStartEvent>,
+    mut query_button_roll_dice: Query<&mut Visibility, With<ButtonRollDice>>,
+    mut game: ResMut<game::Game>,
+) {
+    for _ in turn_start_event_reader.iter() {
+        for mut visibility in query_button_roll_dice.iter_mut() {
+            *visibility = Visibility::Inherited;
+        }
+    }
+}
+
+pub(crate) fn handle_game_over_event(
+    mut event_game_over_reader: EventReader<GameOverEvent>,
+    mut ui_elements_param_set: ParamSet<(
+        Query<(&mut Visibility, With<ButtonRollDice>)>,
+        Query<(&mut Visibility, With<ButtonBearOff>)>,
+        Query<(&mut Visibility, With<LabelPlayerTurn>)>,
+        Query<(&mut Visibility, With<LabelMoveStack>)>,
+        Query<(&mut Text, &mut Visibility, With<LabelGameOver>)>,
+    )>,
+) {
+    for e in event_game_over_reader.iter() {
+        for (mut v, _) in ui_elements_param_set.p0().iter_mut() {
+            *v = Visibility::Hidden;
+        }
+
+        for (mut v, _) in ui_elements_param_set.p1().iter_mut() {
+            *v = Visibility::Hidden;
+        }
+
+        for (mut v, _) in ui_elements_param_set.p2().iter_mut() {
+            *v = Visibility::Hidden;
+        }
+
+        for (mut v, _) in ui_elements_param_set.p3().iter_mut() {
+            *v = Visibility::Hidden;
+        }
+
+        for (mut text, mut v, _) in ui_elements_param_set.p4().iter_mut() {
+            *v = Visibility::Inherited;
+            text.sections[0].value = format!("{:?} Won!", e.player);
+            text.sections[0].style.color = match e.player {
+                game::Color::White => Color::WHITE,
+                game::Color::Black => Color::BLACK,
+            };
+        }
+    }
 }

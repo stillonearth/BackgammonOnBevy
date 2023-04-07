@@ -10,16 +10,12 @@ use bevy::{
 };
 
 use bevy_dice::*;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
+// use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_mod_picking::*;
 use bevy_rapier3d::prelude::*;
 
-use events::{
-    event_dice_roll_result, event_dice_rolls_complete, handle_display_possible_moves,
-    handle_hightlight_choosable_pieces, handle_move_piece_event, handle_piece_picking,
-    DisplayPossibleMovesEvent, HighlightPickablePiecesEvent, MovePieceEvent,
-};
-use ui::ui_logic;
+use events::*;
+use ui::*;
 
 fn main() {
     App::new()
@@ -40,9 +36,12 @@ fn main() {
         .add_event::<HighlightPickablePiecesEvent>()
         .add_event::<DisplayPossibleMovesEvent>()
         .add_event::<MovePieceEvent>()
+        .add_event::<MovePieceEndEvent>()
+        .add_event::<TurnStartEvent>()
+        .add_event::<GameOverEvent>()
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
-        .add_plugin(WorldInspectorPlugin::new())
+        // .add_plugin(WorldInspectorPlugin::new())
         .add_plugins(DefaultPickingPlugins)
         .init_resource::<GameResources>()
         .add_startup_system(spawn_board)
@@ -55,6 +54,10 @@ fn main() {
         .add_system(handle_piece_picking.in_base_set(CoreSet::PostUpdate))
         .add_system(handle_display_possible_moves)
         .add_system(handle_move_piece_event)
+        .add_system(handle_move_piece_end_event)
+        .add_system(handle_dice_roll_start_event)
+        .add_system(handle_turn_start_event)
+        .add_system(handle_game_over_event)
         .run();
 }
 
