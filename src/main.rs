@@ -109,6 +109,7 @@ fn spawn_board(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut start_game_event_writer: EventWriter<StartGameEvent>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     commands
         .spawn((Camera3dBundle {
@@ -132,9 +133,10 @@ fn spawn_board(
         ..default()
     });
     commands
-        .spawn(SceneBundle {
-            scene: asset_server.load("models/board.glb#Scene0"),
-            transform: Transform::from_xyz(0.0, 0.04, 0.0)
+        .spawn(PbrBundle {
+            mesh: asset_server.load("models/board.glb#Mesh0/Primitive0"),
+            material: materials.add(Color::CRIMSON.into()),
+            transform: Transform::from_xyz(-0.4, 0.00, 0.306)
                 .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2))
                 .with_scale(Vec3::splat(0.6)),
             ..default()
