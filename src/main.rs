@@ -10,7 +10,7 @@ use bevy::{
 };
 
 use bevy_dice::*;
-// use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 use bevy_kira_audio::AudioPlugin;
 use bevy_mod_picking::*;
@@ -70,9 +70,9 @@ impl Piece {
         let mut x_end;
 
         if (1..=12).contains(&self.position) {
-            y_start = -0.4;
-            x_start = 0.067;
-            x_end = 0.49;
+            y_start = -0.34;
+            x_start = 0.08;
+            x_end = 0.533;
 
             let delta = (x_end - x_start) / 5.0;
             let offset = -1.0 * (self.position as f32) + 6.0;
@@ -80,22 +80,24 @@ impl Piece {
             coordinates[1] = y_start + DELTA_Y * (self.row - 1) as f32;
 
             if self.position >= 7 {
-                coordinates[0] -= 0.039;
+                coordinates[0] -= 0.06;
             }
         }
 
         if (13..=24).contains(&self.position) {
-            y_start = 0.33;
-            x_start = -0.48;
-            x_end = -0.06;
+            y_start = 0.34;
+            x_start = -0.533;
+            x_end = -0.08;
 
             let delta = (x_end - x_start) / 5.0;
             let offset = 1.0 * (self.position as f32) - 1.0;
-            coordinates[0] = x_start + delta * offset - 0.718 - 0.3 + 0.017;
+            coordinates[0] = x_start + delta * offset - 0.718 - 0.3 + 0.017 - 0.06;
             coordinates[1] = y_start - DELTA_Y * (self.row - 1) as f32;
 
             if self.position >= 19 {
                 coordinates[0] += 0.039;
+            } else {
+                coordinates[0] -= 0.022;
             }
         }
 
@@ -110,7 +112,7 @@ fn spawn_board(
 ) {
     commands
         .spawn((Camera3dBundle {
-            transform: Transform::from_xyz(-1.3, 1.3, 0.0)
+            transform: Transform::from_xyz(-1.7, 1.7, 0.0)
                 .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
             ..default()
         },))
@@ -132,7 +134,9 @@ fn spawn_board(
     commands
         .spawn(SceneBundle {
             scene: asset_server.load("models/board.glb#Scene0"),
-            transform: Transform::from_xyz(0.0, 0.03, 0.0),
+            transform: Transform::from_xyz(0.0, 0.04, 0.0)
+                .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2))
+                .with_scale(Vec3::splat(0.6)),
             ..default()
         })
         .insert(Name::new("Board"));
@@ -151,12 +155,9 @@ fn spawn_board(
 pub(crate) fn spawn_piece(commands: &mut Commands, piece: Piece, game_resources: GameResources) {
     let [x, y] = piece.board_coordinates();
 
-    let transform = Transform::from_xyz(y, 0.02, x)
-        .with_scale(Vec3::splat(0.002))
-        .with_rotation(
-            Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)
-                * Quat::from_rotation_y(std::f32::consts::PI),
-        );
+    let transform = Transform::from_xyz(y, 0.0, x)
+        .with_scale(Vec3::splat(0.03))
+        .with_rotation(Quat::from_rotation_y(std::f32::consts::PI));
 
     let mut material = match piece.color {
         game::Color::White => game_resources.white_material.clone(),
@@ -214,7 +215,10 @@ pub(crate) fn spawn_pieces(
                 },
                 game_resources.clone(),
             );
+            // break;
         }
+
+        // break;
     }
 }
 
@@ -243,7 +247,7 @@ fn main() {
         .add_event::<StartGameEvent>()
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
-        // .add_plugin(WorldInspectorPlugin::new())
+        .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(AudioPlugin)
         .add_plugins(DefaultPickingPlugins)
         .init_resource::<GameResources>()
