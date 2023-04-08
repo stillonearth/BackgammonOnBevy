@@ -10,7 +10,7 @@ use bevy::{
 };
 
 use bevy_dice::*;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
+// use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 use bevy_kira_audio::AudioPlugin;
 use bevy_mod_picking::*;
@@ -215,10 +215,7 @@ pub(crate) fn spawn_pieces(
                 },
                 game_resources.clone(),
             );
-            // break;
         }
-
-        // break;
     }
 }
 
@@ -247,7 +244,7 @@ fn main() {
         .add_event::<StartGameEvent>()
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
-        .add_plugin(WorldInspectorPlugin::new())
+        // .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(AudioPlugin)
         .add_plugins(DefaultPickingPlugins)
         .init_resource::<GameResources>()

@@ -7,8 +7,7 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 rand = "0.8.5"
 bevy_gltf = "0.10"
-bevy-inspector-egui = { version = "0.18.1" }
-bevy_dice = { version = "0.3.4-beta.1" }
+bevy_dice = { version = "0.3.4-beta.2" }
 bevy_rapier3d = { version = "0.21.0", features = [
     "simd-stable",
     "debug-render",
@@ -20,7 +19,7 @@ itertools = "0.10.5"
 default-features = false
 version = "0.10.1"
 features = [
-    "animation",
+    # "animation",
     "bevy_asset",
     "bevy_scene",
     "bevy_winit",
@@ -28,11 +27,11 @@ features = [
     "bevy_pbr",
     "bevy_gltf",
     "bevy_render",
-    "bevy_sprite",
+    # "bevy_sprite",
     "bevy_text",
     "bevy_ui",
     "png",
-    "hdr",
+    # "hdr",
     "jpeg",
     "zstd",
     "x11",
