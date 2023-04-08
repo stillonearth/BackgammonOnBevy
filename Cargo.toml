@@ -5,14 +5,43 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-bevy = { version = "0.10", features = ["jpeg"] }
 rand = "0.8.5"
 bevy_gltf = "0.10"
 bevy-inspector-egui = { version = "0.18.1" }
-bevy_dice = { version = "0.3.2" }
+bevy_dice = { path = "../bevy_dice" } #{ version = "0.3.2" }
 bevy_rapier3d = { version = "0.21.0", features = [
     "simd-stable",
     "debug-render",
 ] }
 bevy_mod_picking = "0.12"
 itertools = "0.10.5"
+
+[dependencies.bevy]
+default-features = false
+version = "0.10.1"
+features = [
+    "animation",
+    "bevy_asset",
+    "bevy_scene",
+    "bevy_winit",
+    "bevy_core_pipeline",
+    "bevy_pbr",
+    "bevy_gltf",
+    "bevy_render",
+    "bevy_sprite",
+    "bevy_text",
+    "bevy_ui",
+    "png",
+    "hdr",
+    "jpeg",
+    "zstd",
+    "x11",
+    "ktx2",
+    "filesystem_watcher",
+    "tonemapping_luts",
+]
+
+[dependencies.bevy_kira_audio]
+version = "0.15.0"
+default-features = false
+features = ["wav", "mp3"]

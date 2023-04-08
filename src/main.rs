@@ -11,86 +11,13 @@ use bevy::{
 
 use bevy_dice::*;
 // use bevy_inspector_egui::quick::WorldInspectorPlugin;
+
+use bevy_kira_audio::AudioPlugin;
 use bevy_mod_picking::*;
 use bevy_rapier3d::prelude::*;
 
 use events::*;
 use ui::*;
-
-fn main() {
-    App::new()
-        .insert_resource(AmbientLight {
-            color: Color::WHITE,
-            brightness: 1.0 / 5.0f32,
-        })
-        .add_plugin(DicePlugin)
-        .insert_resource(DicePluginSettings {
-            render_size: (640, 640),
-            number_of_fields: 1,
-            dice_scale: 0.15,
-            start_position: Vec3::new(-1.0, 0.0, -0.3),
-            ..default()
-        })
-        .insert_resource(DirectionalLightShadowMap { size: 4096 })
-        .insert_resource(game::Game::new())
-        .add_event::<HighlightPickablePiecesEvent>()
-        .add_event::<DisplayPossibleMovesEvent>()
-        .add_event::<MovePieceEvent>()
-        .add_event::<MovePieceEndEvent>()
-        .add_event::<TurnStartEvent>()
-        .add_event::<GameOverEvent>()
-        .add_plugins(DefaultPlugins)
-        .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
-        // .add_plugin(WorldInspectorPlugin::new())
-        .add_plugins(DefaultPickingPlugins)
-        .init_resource::<GameResources>()
-        .add_startup_system(spawn_board)
-        .add_startup_system(spawn_pieces)
-        .add_startup_system(setup_ui)
-        .add_system(ui_logic)
-        .add_system(event_dice_roll_result)
-        .add_system(event_dice_rolls_complete)
-        .add_system(handle_hightlight_choosable_pieces)
-        .add_system(handle_piece_picking.in_base_set(CoreSet::PostUpdate))
-        .add_system(handle_display_possible_moves)
-        .add_system(handle_move_piece_event)
-        .add_system(handle_move_piece_end_event)
-        .add_system(handle_dice_roll_start_event)
-        .add_system(handle_turn_start_event)
-        .add_system(handle_game_over_event)
-        .run();
-}
-
-fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands
-        .spawn((Camera3dBundle {
-            transform: Transform::from_xyz(-1.5, 1.5, 0.0)
-                .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
-            ..default()
-        },))
-        .insert(PickingCameraBundle::default());
-
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight {
-            shadows_enabled: false,
-            ..default()
-        },
-        cascade_shadow_config: CascadeShadowConfigBuilder {
-            num_cascades: 1,
-            maximum_distance: 1.6,
-            ..default()
-        }
-        .into(),
-        ..default()
-    });
-    commands
-        .spawn(SceneBundle {
-            scene: asset_server.load("models/board.glb#Scene0"),
-            transform: Transform::from_xyz(0.0, 0.03, 0.0),
-            ..default()
-        })
-        .insert(Name::new("Board"));
-}
 
 #[derive(Clone, Debug, Resource)]
 pub(crate) struct GameResources {
@@ -176,14 +103,60 @@ impl Piece {
     }
 }
 
+fn spawn_board(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut start_game_event_writer: EventWriter<StartGameEvent>,
+) {
+    commands
+        .spawn((Camera3dBundle {
+            transform: Transform::from_xyz(-1.3, 1.3, 0.0)
+                .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+            ..default()
+        },))
+        .insert(PickingCameraBundle::default());
+
+    commands.spawn(DirectionalLightBundle {
+        directional_light: DirectionalLight {
+            shadows_enabled: false,
+            ..default()
+        },
+        cascade_shadow_config: CascadeShadowConfigBuilder {
+            num_cascades: 1,
+            maximum_distance: 1.6,
+            ..default()
+        }
+        .into(),
+        ..default()
+    });
+    commands
+        .spawn(SceneBundle {
+            scene: asset_server.load("models/board.glb#Scene0"),
+            transform: Transform::from_xyz(0.0, 0.03, 0.0),
+            ..default()
+        })
+        .insert(Name::new("Board"));
+
+    // Spawn lights
+    commands
+        .spawn(SpotLightBundle {
+            transform: Transform::from_xyz(0.0, 1.0, 3.0),
+            ..Default::default()
+        })
+        .insert(Name::new("Spotlight"));
+
+    start_game_event_writer.send(StartGameEvent);
+}
+
 pub(crate) fn spawn_piece(commands: &mut Commands, piece: Piece, game_resources: GameResources) {
     let [x, y] = piece.board_coordinates();
 
-    let mut transform = Transform::from_xyz(0.0, 0.0, 0.0)
+    let transform = Transform::from_xyz(y, 0.02, x)
         .with_scale(Vec3::splat(0.002))
-        .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2));
-
-    transform.translation = Vec3::new(y, 0.03, x);
+        .with_rotation(
+            Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)
+                * Quat::from_rotation_y(std::f32::consts::PI),
+        );
 
     let mut material = match piece.color {
         game::Color::White => game_resources.white_material.clone(),
@@ -243,4 +216,51 @@ pub(crate) fn spawn_pieces(
             );
         }
     }
+}
+
+fn main() {
+    App::new()
+        .insert_resource(AmbientLight {
+            color: Color::WHITE,
+            brightness: 1.0 / 5.0f32,
+        })
+        .add_plugin(DicePlugin)
+        .insert_resource(DicePluginSettings {
+            render_size: (640, 640),
+            number_of_fields: 1,
+            dice_scale: 0.15,
+            start_position: Vec3::new(-1.0, 0.0, -0.3),
+            ..default()
+        })
+        .insert_resource(DirectionalLightShadowMap { size: 4096 })
+        .insert_resource(game::Game::new())
+        .add_event::<HighlightPickablePiecesEvent>()
+        .add_event::<DisplayPossibleMovesEvent>()
+        .add_event::<MovePieceEvent>()
+        .add_event::<MovePieceEndEvent>()
+        .add_event::<TurnStartEvent>()
+        .add_event::<GameOverEvent>()
+        .add_event::<StartGameEvent>()
+        .add_plugins(DefaultPlugins)
+        .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
+        // .add_plugin(WorldInspectorPlugin::new())
+        .add_plugin(AudioPlugin)
+        .add_plugins(DefaultPickingPlugins)
+        .init_resource::<GameResources>()
+        .add_startup_system(spawn_board)
+        .add_startup_system(spawn_pieces)
+        .add_startup_system(setup_ui)
+        .add_system(ui_logic)
+        .add_system(event_dice_roll_result)
+        .add_system(event_dice_rolls_complete)
+        .add_system(handle_hightlight_choosable_pieces)
+        .add_system(handle_piece_picking.in_base_set(CoreSet::PostUpdate))
+        .add_system(handle_display_possible_moves)
+        .add_system(handle_move_piece_event)
+        .add_system(handle_move_piece_end_event)
+        .add_system(handle_dice_roll_start_event)
+        .add_system(handle_turn_start_event)
+        .add_system(handle_game_over_event)
+        .add_system(handle_start_game_event)
+        .run();
 }

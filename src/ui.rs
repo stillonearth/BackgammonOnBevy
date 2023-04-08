@@ -170,6 +170,7 @@ pub(crate) fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                         size: Size::new(Val::Px(150.0), Val::Px(65.0)),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
+                        display: Display::None,
                         ..default()
                     },
                     visibility: Visibility::Hidden,

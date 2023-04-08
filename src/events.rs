@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy_dice::*;
+use bevy_kira_audio::prelude::*;
 use bevy_mod_picking::PickingEvent;
 
 use crate::{
@@ -43,12 +44,18 @@ pub(crate) struct DiceRollTimer {
     pub(crate) timer: Timer,
 }
 
+#[derive(Default, Clone, Resource)]
+pub struct StartGameEvent;
+
 pub(crate) fn event_dice_roll_result(
     mut dice_rolls: EventReader<DiceRollResult>,
     mut game: ResMut<game::Game>,
+    asset_server: Res<AssetServer>,
+    audio: Res<Audio>,
 ) {
     let player = game.player;
     for event in dice_rolls.iter() {
+        audio.play(asset_server.load("sounds/throw.wav"));
         game.game_log.push(GameLogEntry {
             player,
             dice_rolls: event.values[0].clone(),
@@ -101,10 +108,14 @@ pub(crate) fn handle_piece_picking(
     mut pieces_query: Query<(Entity, &mut Piece)>,
     mut display_possible_moves_event_writer: EventWriter<DisplayPossibleMovesEvent>,
     mut move_piece_event_writer: EventWriter<MovePieceEvent>,
+    asset_server: Res<AssetServer>,
+    audio: Res<Audio>,
 ) {
     for event in picking_event_reader.iter() {
         if let PickingEvent::Clicked(e) = event {
             // remove selection from Piece entity
+
+            audio.play(asset_server.load("sounds/click.wav"));
 
             let all_pieces = pieces_query
                 .iter()
@@ -137,7 +148,7 @@ pub(crate) fn handle_display_possible_moves(
     mut commands: Commands,
     mut display_possible_moves_event_reader: EventReader<DisplayPossibleMovesEvent>,
     mut pieces_query: Query<(Entity, &mut Piece)>,
-    mut button_bear_off_query: Query<(&mut Visibility, &mut ButtonBearOff)>,
+    mut button_bear_off_query: Query<(&mut Visibility, &mut Style, &mut ButtonBearOff)>,
     game: Res<game::Game>,
     game_resources: Res<GameResources>,
 ) {
@@ -157,15 +168,18 @@ pub(crate) fn handle_display_possible_moves(
             piece.chosen = entity.index() == event.entity.unwrap().index();
         });
 
-        for (mut visibility, mut button) in &mut button_bear_off_query.iter_mut() {
+        for (mut visibility, mut style, mut button) in &mut button_bear_off_query.iter_mut() {
             *visibility = Visibility::Hidden;
+            style.display = Display::None;
             button.position_to = None;
         }
 
         for position in possible_positions.iter() {
             if *position >= 24 || *position < 0 {
-                for (mut visibility, mut button) in &mut button_bear_off_query.iter_mut() {
+                for (mut visibility, mut style, mut button) in &mut button_bear_off_query.iter_mut()
+                {
                     *visibility = Visibility::Inherited;
+                    style.display = Display::Flex;
                     button.position_to = Some(*position + 1);
                 }
                 break;
@@ -352,5 +366,16 @@ pub(crate) fn handle_game_over_event(
                 game::Color::Black => Color::BLACK,
             };
         }
+    }
+}
+
+pub(crate) fn handle_start_game_event(
+    mut start_game_event_reader: EventReader<StartGameEvent>,
+    asset_server: Res<AssetServer>,
+    audio: Res<Audio>,
+) {
+    for _ in start_game_event_reader.iter() {
+        let sound = asset_server.load("sounds/background.mp3");
+        audio.play(sound).looped();
     }
 }
