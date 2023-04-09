@@ -10,7 +10,7 @@ use bevy::{
 };
 
 use bevy_dice::*;
-// use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 use bevy_kira_audio::AudioPlugin;
 use bevy_mod_picking::*;
@@ -132,11 +132,12 @@ fn spawn_board(
         .into(),
         ..default()
     });
+
     commands
-        .spawn(PbrBundle {
-            mesh: asset_server.load("models/board.glb#Mesh0/Primitive0"),
-            material: materials.add(Color::CRIMSON.into()),
-            transform: Transform::from_xyz(-0.4, 0.00, 0.306)
+        .spawn(SceneBundle {
+            scene: asset_server.load("models/board.glb#Scene0"),
+            // material: materials.add(Color::CRIMSON.into()),
+            transform: Transform::from_xyz(0.0, 0.05, 0.0)
                 .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2))
                 .with_scale(Vec3::splat(0.6)),
             ..default()
@@ -246,7 +247,7 @@ fn main() {
         .add_event::<StartGameEvent>()
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
-        // .add_plugin(WorldInspectorPlugin::new())
+        .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(AudioPlugin)
         .add_plugins(DefaultPickingPlugins)
         .init_resource::<GameResources>()
